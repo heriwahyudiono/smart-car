@@ -1,18 +1,18 @@
 #include <ESP8266WiFi.h>
 #include <FirebaseESP8266.h>
 
+// Ganti dengan WiFi dan Firebase milikmu
 #define WIFI_SSID "Galaxy A05"
 #define WIFI_PASSWORD "12345678"
-
 #define FIREBASE_HOST "smartcar-f2205-default-rtdb.asia-southeast1.firebasedatabase.app"
 #define FIREBASE_API_KEY "AIzaSyBzwFjTAbBI4cLrYXiw03A2VG48_YEbVwE"
 
-// Motor A (kiri)
+// Motor A
 const int IN1 = D1;
 const int IN2 = D2;
 const int ENA = D3;
 
-// Motor B (kanan)
+// Motor B
 const int IN3 = D5;
 const int IN4 = D6;
 const int ENB = D4;
@@ -24,19 +24,14 @@ FirebaseAuth auth;
 void setup() {
   Serial.begin(115200);
 
-  // Inisialisasi pin motor
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
   pinMode(ENA, OUTPUT);
+
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
   pinMode(ENB, OUTPUT);
 
-  // Nyalakan kedua motor penuh
-  digitalWrite(ENA, HIGH);
-  digitalWrite(ENB, HIGH);
-
-  // Koneksi WiFi
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
@@ -44,15 +39,13 @@ void setup() {
   }
   Serial.println("WiFi Terhubung");
 
-  // Konfigurasi Firebase
   config.host = FIREBASE_HOST;
   config.api_key = FIREBASE_API_KEY;
 
-  // Autentikasi Anonymous
   if (Firebase.signUp(&config, &auth, "", "")) {
     Serial.println("Sign-up berhasil (Anonymous)");
   } else {
-    Serial.printf("Sign-up gagal, alasan: %s\n", config.signer.signupError.message.c_str());
+    Serial.printf("Sign-up gagal: %s\n", config.signer.signupError.message.c_str());
   }
 
   Firebase.begin(&config, &auth);
@@ -61,23 +54,38 @@ void setup() {
 
 void controlMotor(String direction) {
   if (direction == "forward") {
-    digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);  // Motor A
-    digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);  // Motor B
+    digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+    digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
   } else if (direction == "left") {
-    digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);   // Motor A mati
-    digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);  // Motor B hidup
+    digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
+    digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
   } else if (direction == "right") {
-    digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);  // Motor A hidup
-    digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);   // Motor B mati
+    digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+    digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
   } else { // stop
     digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
     digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
+    analogWrite(ENA, 0);
+    analogWrite(ENB, 0);
+    return;
   }
+
+  // Default speed pelan
+  analogWrite(ENA, 100);
+  analogWrite(ENB, 100);
 }
 
 void loop() {
-  if (Firebase.getString(firebaseData, "/robot_control/direction")) {
-    String direction = firebaseData.stringData();
+  if (Firebase.getJSON(firebaseData, "/robot_control")) {
+    FirebaseJson &json = firebaseData.jsonObject();
+    FirebaseJsonData result;
+
+    String direction = "stop";
+
+    if (json.get(result, "direction") && result.success) {
+      direction = result.stringValue;
+    }
+
     Serial.println("Arah: " + direction);
     controlMotor(direction);
   } else {
